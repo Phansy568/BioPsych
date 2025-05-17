@@ -18,17 +18,16 @@ print("CSV 文件名列表(按名称排序):")
 for i, name in enumerate(csv_filenames):
     print(f"{i+1}: {name}")
 
-time.sleep(3)  # 等待用户查看文件名列表
+for i in range(1, 37):
 
-# 使用 Win 打开搜索，输入“biocapture”，回车启动软件
-pyautogui.press('win')
-time.sleep(1)
-pyautogui.write('biocapture')
-time.sleep(0.5)
-pyautogui.press('enter')
-time.sleep(5)  # 等待软件启动
-
-for i in range(7, 37):
+    pyautogui.press('enter')
+    # 使用 Win 打开搜索，输入“biocapture”，回车启动软件
+    pyautogui.press('win')
+    time.sleep(1)
+    pyautogui.write('biocapture')
+    time.sleep(2)
+    pyautogui.press('enter')
+    time.sleep(5)  # 等待软件启动
     # 按 space, tab, enter
     pyautogui.press('space')
     pyautogui.press('tab')
@@ -40,7 +39,7 @@ for i in range(7, 37):
     pyautogui.press('f')
     pyautogui.press('o')
     pyautogui.press('r')
-    time.sleep(8)
+    time.sleep(5)
 
     # 输入“循环次数-”，个位数前补0
     pyautogui.write(f"{i:02d}-")
@@ -61,5 +60,5 @@ for i in range(7, 37):
     pyautogui.press('enter')
     pyautogui.press('enter', presses=2)
 
-    # 等待1分钟
-    time.sleep(60)
+    # 等待文件导出，以减轻运行压力
+    time.sleep(40)
