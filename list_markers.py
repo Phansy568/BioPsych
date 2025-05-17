@@ -4,8 +4,8 @@ import csv
 
 def list_markers_in_csv(csv_folder):
     """列出CSV文件中出现的所有标记（markers）"""
-    # 所有可能的标记列表（从EEG_Analyse.py中获取的信息）
-    known_markers = ['start', 's', 'jingxi', 'strat', 'JINGXI', 'end', 'e', 'END']
+    # 非标记列名
+    non_marker_columns = ['Elapsed Time', 'Fp1', 'Fp2']
     
     # 存储所有文件中发现的标记
     all_markers = {}
@@ -27,19 +27,9 @@ def list_markers_in_csv(csv_folder):
             # 记录该文件中的标记
             file_markers[csv_file] = []
             
-            # 检查已知标记
-            for marker in known_markers:
-                if marker in columns:
-                    if marker not in all_markers:
-                        all_markers[marker] = 0
-                    all_markers[marker] += 1
-                    file_markers[csv_file].append(marker)
-            
-            # 检查其他可能的标记（包含特定关键词的列）
-            marker_keywords = ['mark', 'trigger', 'event', 'stim', 'tag']
+            # 将除了非标记列之外的所有列视为标记
             for col in columns:
-                # 检查列名是否包含标记关键词
-                if any(keyword in col.lower() for keyword in marker_keywords) and col not in known_markers:
+                if col not in non_marker_columns:
                     if col not in all_markers:
                         all_markers[col] = 0
                     all_markers[col] += 1
