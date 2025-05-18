@@ -18,7 +18,8 @@ print("CSV 文件名列表(按名称排序):")
 for i, name in enumerate(csv_filenames):
     print(f"{i+1}: {name}")
 
-for i in range(1, 37):
+for i in range(35
+, 37):
 
     pyautogui.press('enter')
     # 使用 Win 打开搜索，输入“biocapture”，回车启动软件

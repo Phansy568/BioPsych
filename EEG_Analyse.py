@@ -8,11 +8,11 @@ from scipy.stats import ttest_rel
 from statsmodels.stats.anova import AnovaRM
 
 # 1.1 数据读取
-def read_csv_data(file_path):
+def read_csv_data(file_path, file_conditions_order=None):
     """读取CSV格式的EEG数据，并根据标记提取所有实验段，返回[(raw, condition_label), ...]"""
     # 在函数开头初始化empty_segments
     empty_segments = {}
-    
+
     # 定义标记到标签的映射关系
     key_to_label = {
         'long': '长',
@@ -20,13 +20,13 @@ def read_csv_data(file_path):
         'manga': '漫',
         'manhua': '漫',
     }
-    
+
     data = pd.read_csv(file_path)
     columns = data.columns
 
     # 获取被试姓名
     filename = os.path.basename(file_path)
-    subject_name = filename.split('-')[1] if '-' in filename else ""
+    subject_name = filename.split('-')[1] if '-' in filename else "" # 您已有的代码
 
     # 标记定义
     start_keys = [k for k in columns if k.lower() in ['start', 's', 'strat']]
@@ -37,9 +37,11 @@ def read_csv_data(file_path):
     segments = []
     condition_labels = []
 
-    # 文件名顺序标签
-    file_conditions = ['长', '短', '漫']
-
+    # 文件名顺序标签，如果提供了file_conditions_order，则使用它
+    file_conditions = file_conditions_order if file_conditions_order else ['长', '短', '漫']
+    
+    print(f"使用条件顺序: {file_conditions}")
+    
     if subject_name == "JF" and jingxi_keys:
         # JF：最后一个JINGXI段为manhua
         idxs = data.index[data[jingxi_keys[0]] == 1].tolist()
@@ -158,44 +160,57 @@ def read_csv_data(file_path):
         # 直接用long/short/manga等分段
         seg_keys = [k for k in columns if k.lower() in key_to_label.keys()]
         seg_count = min(len(seg_keys), 3)
-        print(f"被试 {subject_name} 的分段标记: {seg_keys}")
+        print(f"--- 处理文件: {os.path.basename(file_path)} ---") # 添加打印
+        print(f"被试 {subject_name} 的分段标记: {seg_keys}") # 添加打印
+
+        # 处理过的标记
+        processed_keys = []
         
-        for i, key in enumerate(seg_keys[:3]):
-            idxs = data.index[data[key] == 1].tolist()
-            print(f"标记 {key} 的索引位置: {idxs}")
-            if not idxs:
-                print(f"警告：标记 {key} 没有找到有效数据点")
-                empty_segments[key] = "未找到标记点"
+        for i, key in enumerate(seg_keys[:seg_count]): # 修改为seg_count
+            # 如果已经处理过这个标记，跳过
+            if key in processed_keys:
                 continue
                 
-            s = idxs[0]
-            if i+1 < len(seg_keys):
-                next_idxs = data.index[data[seg_keys[i+1]] == 1].tolist()
-                e = next_idxs[0]-1 if next_idxs else len(data)-1
-            else:
-                e = len(data)-1
+            processed_keys.append(key)
                 
+            print(f"\n--- 处理标记: {key} ---") # 添加打印
+            idxs = data.index[data[key] == 1].tolist()
+            print(f"标记 {key} 的索引位置: {idxs}") # 添加打印
+            
+            # 检查是否有至少两个标记点
+            if len(idxs) < 2:
+                print(f"警告：标记 {key} 没有找到两个标记点（开始和结束），只有 {len(idxs)} 个点")
+                empty_segments[key] = f"标记点不足，只有 {len(idxs)} 个点"
+                continue
+
+            # 使用同一标记的第一个位置作为开始，第二个位置作为结束
+            s = idxs[0]
+            e = idxs[1]
+            
+            print(f"计算的分段范围: {s}-{e} (同一标记的第一次和第二次出现)") # 添加打印
+
             # 添加更严格的分段范围验证
             if s >= len(data) or e >= len(data) or s > e:
                 print(f"警告：无效的分段范围 {s}-{e}，跳过此分段")
                 empty_segments[key] = f"无效范围 {s}-{e}"
                 continue
-                
+
             # 检查分段长度是否合理（至少1000个数据点，约1秒数据）
             if (e - s) < 1000:
                 print(f"警告：分段 {key} 数据点不足({e-s})，可能导致功率谱计算失败")
                 empty_segments[key] = f"数据点不足 {e-s}"
                 continue
-                
+
             exp_data = data.iloc[s:e+1, :]
-            
+
             # 检查数据是否全为零或接近零
             if np.allclose(exp_data.select_dtypes(include=[np.number]).values, 0, atol=1e-6):
                 print(f"警告：分段 {key} 数据全为零或接近零，跳过")
                 empty_segments[key] = "数据全为零"
                 continue
-                
+
             label = key_to_label.get(key.lower(), f"未知_{key}")
+            print(f"分段 {key} 成功提取，标签为: {label}") # 添加打印
             segments.append(exp_data)
             condition_labels.append(label)
     else:
@@ -206,15 +221,63 @@ def read_csv_data(file_path):
     # 提取EEG数据并生成raw对象
     results = []
     for exp_data, cond_label in zip(segments, condition_labels):
+        # ---- 您已有的调试打印 ----
+        if subject_name == "ZYH": # 确保这里的 "ZYH" 与被试35文件名中的ID一致
+            print(f"\nDEBUG: Subject {subject_name}, Condition {cond_label}")
+            print("exp_data.head(10):") # 打印原始分段数据的前10行
+            print(exp_data.head(10))
+            print("exp_data.isnull().sum():") # 检查原始分段数据中各列的NaN数量
+            print(exp_data.isnull().sum())
+            print("exp_data.dtypes:") # 检查原始分段数据中各列的数据类型
+            print(exp_data.dtypes)
+        # ---- 调试打印结束 ----
+
         eeg_cols = [col for col in exp_data.columns if col.lower() in ['fp1', 'fp2']]
         if len(eeg_cols) < 2:
             non_time_cols = [col for col in exp_data.columns if col != 'Elapsed Time']
-            eeg_data = exp_data[non_time_cols[:2]]
+            eeg_data = exp_data[non_time_cols[:2]].copy() # 使用 .copy() 避免 SettingWithCopyWarning
         else:
-            eeg_data = exp_data[eeg_cols]
+            eeg_data = exp_data[eeg_cols].copy() # 使用 .copy() 避免 SettingWithCopyWarning
+        
+        # ---- 新增：在创建RawArray前对eeg_data进行NaN插值 ----
+        if eeg_data.isnull().values.any():
+            print(f"INFO: 被试 {subject_name}, 条件 {cond_label} - eeg_data 包含NaN，尝试插值...")
+            for col in eeg_data.columns:
+                if eeg_data[col].isnull().any():
+                    # 确保列是数值类型，非数值转为NaN
+                    eeg_data[col] = pd.to_numeric(eeg_data[col], errors='coerce')
+                    
+                    if eeg_data[col].isnull().all():
+                        print(f"警告：被试 {subject_name}, 条件 {cond_label}, 列 {col} 全是NaN。将用0填充。")
+                        eeg_data[col] = eeg_data[col].fillna(0)
+                        continue
+                    
+                    # 使用pandas内置插值
+                    try:
+                        eeg_data[col] = eeg_data[col].interpolate(method='linear', limit_direction='both', axis=0)
+                        # 如果线性插值后仍有NaN (通常是序列开头或末尾的NaN)，尝试用前后值填充
+                        if eeg_data[col].isnull().any():
+                            eeg_data[col] = eeg_data[col].fillna(method='bfill').fillna(method='ffill')
+                        
+                        remaining_nans = eeg_data[col].isnull().sum()
+                        if remaining_nans > 0:
+                            print(f"警告：被试 {subject_name}, 条件 {cond_label}, 列 {col} 插值后仍有 {remaining_nans} 个NaN。将用0填充剩余NaN。")
+                            eeg_data[col] = eeg_data[col].fillna(0) # 对插值后仍存在的NaN用0填充
+                        else:
+                            print(f"INFO: 被试 {subject_name}, 条件 {cond_label}, 列 {col} 插值完成。")
+                            
+                    except Exception as e_interp:
+                        print(f"错误：被试 {subject_name}, 条件 {cond_label}, 列 {col} 插值失败: {e_interp}。将用0填充NaN。")
+                        eeg_data[col] = eeg_data[col].fillna(0) # 插值失败则用0填充
+
+            if eeg_data.isnull().values.any():
+                 print(f"严重警告：被试 {subject_name}, 条件 {cond_label} - eeg_data 在插值尝试后仍包含NaN。这可能导致后续处理问题。")
+        # ---- 新增插值结束 ----
+
         ch_names = list(eeg_data.columns)
         ch_types = ['eeg'] * len(ch_names)
         info = mne.create_info(ch_names=ch_names, sfreq=1000, ch_types=ch_types)
+        print(eeg_data.head() ,eeg_data.dtypes)
         raw = mne.io.RawArray(eeg_data.T.values, info)
         results.append((raw, cond_label))
         
@@ -261,51 +324,132 @@ def parse_filename(filename):
 def process_all_subjects(data_folder):
     """批量处理所有被试的数据"""
     all_subjects_data = []
-    
+
     # 获取所有CSV文件
-    csv_files = [f for f in os.listdir(data_folder) 
-                if f.endswith('.csv') and not f.startswith('bcrx')
-                and any(f.startswith(f"{num}-") for num in ["35", "36"])]  # 只处理35和36编号
-    
+    csv_files = [f for f in os.listdir(data_folder)
+                if f.endswith('.csv') and not f.startswith('bcrx')] # 处理所有文件
+
     for csv_file in csv_files:
         file_path = os.path.join(data_folder, csv_file)
         subject_id, gender, conditions = parse_filename(csv_file)
-        
+
         print(f"处理被试 {subject_id} 的数据...")
         
-        # 读取数据，返回(raw, label)对
-        raw_label_list = read_csv_data(file_path)
+        # 将条件代码转换为中文标签
+        condition_map_reverse = {'a': '短', 'b': '长', 'c': '漫'}
+        file_conditions_order = [condition_map_reverse[c] for c in conditions if c in condition_map_reverse]
+        
+        # 如果没有有效的条件顺序，使用默认顺序
+        if not file_conditions_order:
+            file_conditions_order = ['长', '短', '漫']
+            
+        print(f"从文件名解析的条件顺序: {file_conditions_order}")
+
+        # 读取数据，返回(raw, label)对，传递条件顺序
+        raw_label_list = read_csv_data(file_path, file_conditions_order)
         
         for (raw, cond_label) in raw_label_list:
+            # 打印滤波前的数据统计
+            try:
+                data_before_filter = raw.copy().get_data() # 使用copy以防影响后续操作
+                print(f"被试 {subject_id} 条件 {cond_label} 的数据统计 (滤波前):")
+                print(f"  形状: {data_before_filter.shape}")
+                print(f"  是否包含NaN: {np.isnan(data_before_filter).any()}")
+                if data_before_filter.size > 0 and not np.isnan(data_before_filter).all():
+                    print(f"  均值: {np.mean(data_before_filter)}")
+                    print(f"  方差: {np.var(data_before_filter)}")
+                    print(f"  最小值: {np.min(data_before_filter)}")
+                    print(f"  最大值: {np.max(data_before_filter)}")
+                    print(f"  零值比例: {np.sum(data_before_filter == 0) / data_before_filter.size}")
+                elif np.isnan(data_before_filter).all():
+                    print(f"  数据在滤波前已全是NaN")
+                else:
+                    print(f"  数据为空或无法计算统计值")
+            except Exception as e:
+                print(f"警告：被试 {subject_id} 条件 {cond_label} 滤波前统计失败: {str(e)}")
+
+
             # 2.1 预处理
             raw.filter(l_freq=0.5, h_freq=40, method='fir', phase='zero-double')  # 带通滤波0.5-40Hz
             raw.notch_filter(freqs=50)  # 陷波滤波去除工频干扰
             
             # 2.2 功率谱密度计算 - 添加数据有效性检查
+            # 在功率谱计算前添加 (这是您已有的打印，现在明确其为滤波后)
+            data_array = raw.get_data()
+            print(f"被试 {subject_id} 条件 {cond_label} 的数据统计 (滤波后):") # 修改了标签以示区别
+            print(f"  形状: {data_array.shape}")
+            print(f"  均值: {np.mean(data_array)}")
+            print(f"  方差: {np.var(data_array)}")
+            print(f"  最小值: {np.min(data_array)}")
+            print(f"  最大值: {np.max(data_array)}")
+            print(f"  零值比例: {np.sum(data_array == 0) / data_array.size if data_array.size > 0 else 'N/A'}")
+
+            # 检查并处理NaN值
+            data_array = raw.get_data() # 确保这是最新的数据
+            if np.isnan(data_array).any():
+                print(f"警告：被试 {subject_id} 条件 {cond_label} 的数据包含NaN值，尝试插值替换")
+                # 对每个通道分别处理NaN值
+                for ch_idx in range(data_array.shape[0]):
+                    # 获取非NaN的索引和值
+                    non_nan_idx = np.where(~np.isnan(data_array[ch_idx]))[0]
+                    if len(non_nan_idx) == 0:
+                        print(f"错误：通道 {ch_idx} 全是NaN值，无法修复")
+                        continue
+                    non_nan_values = data_array[ch_idx, non_nan_idx]
+                    # 创建插值函数
+                    if len(non_nan_idx) > 1:  # 至少需要两个点才能插值
+                        from scipy import interpolate
+                        f = interpolate.interp1d(non_nan_idx, non_nan_values, 
+                                                kind='linear', bounds_error=False, 
+                                                fill_value=(non_nan_values[0], non_nan_values[-1]))
+                        # 生成所有索引
+                        all_idx = np.arange(len(data_array[ch_idx]))
+                        # 替换原始数据
+                        data_array[ch_idx] = f(all_idx)
+                    else:  # 如果只有一个非NaN值，用该值填充所有NaN
+                        data_array[ch_idx] = non_nan_values[0]
+                
+                # 更新raw对象的数据
+                raw._data = data_array
+                
+                # 再次检查
+                if np.isnan(raw.get_data()).any():
+                    print(f"错误：被试 {subject_id} 条件 {cond_label} 的数据仍然包含NaN值，跳过处理")
+                    continue
+            
             if len(raw.get_data()) == 0:
                 print(f"警告：被试 {subject_id} 条件 {cond_label} 的数据为空，跳过")
                 continue
                 
+            # 在process_all_subjects函数中，修改功率谱计算部分
             try:
                 # 检查数据是否全为零或接近零
                 if np.allclose(raw.get_data(), 0, atol=1e-6):
                     print(f"警告：被试 {subject_id} 条件 {cond_label} 的数据全为零，跳过功率谱计算")
                     continue
                     
+                # 添加额外的数据检查
+                data_var = np.var(raw.get_data())
+                if data_var < 1e-10:
+                    print(f"警告：被试 {subject_id} 条件 {cond_label} 的数据方差过小 ({data_var})，跳过功率谱计算")
+                    continue
+                    
                 freqs = np.arange(1, 40, 1)
+                # 修改功率谱计算参数，尝试解决"Weights sum to zero"问题
                 psds, freqs = mne.time_frequency.psd_array_welch(
                     raw.get_data(),
                     sfreq=raw.info['sfreq'],
                     fmin=1,
                     fmax=40,
                     n_jobs=4,
-                    n_fft=2048,  # 增加FFT点数以提高频率分辨率
-                    n_overlap=512  # 增加重叠以提高估计稳定性
+                    n_fft=1024,  # 减小FFT点数
+                    n_overlap=256,  # 减小重叠
+                    average='mean'  # 明确指定平均方法
                 )
             except Exception as e:
                 print(f"警告：被试 {subject_id} 条件 {cond_label} 的功率谱计算失败: {str(e)}")
                 continue
-                
+            
             # 2.3 提取左侧额区电极
             left_frontal_chs = [i for i, ch in enumerate(raw.ch_names) if ch in ['Fp1']]
             
@@ -341,15 +485,29 @@ def main():
     results_df = process_all_subjects(csv_folder)
     
     # 3.1 统计分析
-    # 重复测量方差分析 - α波能量
-    anova_alpha = AnovaRM(results_df, 'AlphaPower', 'Subject', within=['Condition']).fit()
-    print("\nα波能量重复测量方差分析结果:")
-    print(anova_alpha.summary())
+    # 检查数据平衡性
+    print("\n数据平衡性检查:")
+    for subject in results_df['Subject'].unique():
+        conditions = results_df[results_df['Subject'] == subject]['Condition'].unique()
+        print(f"被试 {subject}: {len(conditions)} 个条件 - {', '.join(conditions)}")
     
-    # 重复测量方差分析 - β/α比值
-    anova_ratio = AnovaRM(results_df, 'BetaAlphaRatio', 'Subject', within=['Condition']).fit()
-    print("\nβ/α比值重复测量方差分析结果:")
-    print(anova_ratio.summary())
+    # 尝试使用能处理不平衡数据的方法进行统计分析
+    try:
+        # 重复测量方差分析 - α波能量
+        anova_alpha = AnovaRM(results_df, 'AlphaPower', 'Subject', within=['Condition']).fit()
+        print("\nα波能量重复测量方差分析结果:")
+        print(anova_alpha.summary())
+        
+        # 重复测量方差分析 - β/α比值
+        anova_ratio = AnovaRM(results_df, 'BetaAlphaRatio', 'Subject', within=['Condition']).fit()
+        print("\nβ/α比值重复测量方差分析结果:")
+        print(anova_ratio.summary())
+    except ValueError as e:
+        print(f"\n方差分析失败: {str(e)}")
+        print("尝试使用配对t检验进行条件间比较...")
+        
+        # 如果方差分析失败，直接进行配对t检验
+        # 这里不需要平衡数据，只比较有共同数据的被试
     
     # 3.2 事后配对t检验（Bonferroni校正）
     print("\n事后配对t检验结果:")
