@@ -31,8 +31,7 @@ def read_csv_data(file_path, file_conditions_order=None):
     # 标记定义
     start_keys = [k for k in columns if k.lower() in ['start', 's', 'strat']]
     end_keys = [k for k in columns if k.lower() in ['end', 'e', 'end']]
-    seg_keys = [k for k in columns if k.lower() in ['long','short','manga','manhua','LONG', 'SHORT']]
-    jingxi_keys = [k for k in columns if k.lower() == 'jingxi']
+    seg_keys = [k for k in columns if k.lower() in ['long','short','manga','manhua','LONG', 'SHORT',"jingxi"]]
 
     segments = []
     condition_labels = []
@@ -41,84 +40,8 @@ def read_csv_data(file_path, file_conditions_order=None):
     file_conditions = file_conditions_order if file_conditions_order else ['长', '短', '漫']
     
     print(f"使用条件顺序: {file_conditions}")
-    
-    if subject_name == "JF" and jingxi_keys:
-        # JF：最后一个JINGXI段为manhua
-        idxs = data.index[data[jingxi_keys[0]] == 1].tolist()
-        for i, s in enumerate(idxs):
-            if i < len(idxs) - 1:
-                e = idxs[i+1] - 1
-            else:
-                e = len(data) - 1
-            exp_data = data.iloc[s:e+1, :]
-            if i == len(idxs) - 1:
-                label = "漫"
-            else:
-                label = file_conditions[i] if i < 2 else "漫"
-            segments.append(exp_data)
-            condition_labels.append(label)
-    elif subject_name == "RHY" and jingxi_keys:
-        # RHY：中间的jingxi段为manhua
-        idxs = data.index[data[jingxi_keys[0]] == 1].tolist()
-        for i, s in enumerate(idxs):
-            if i < len(idxs) - 1:
-                e = idxs[i+1] - 1
-            else:
-                e = len(data) - 1
-            exp_data = data.iloc[s:e+1, :]
-            if i == 2:
-                label = "漫"
-            else:
-                label = file_conditions[i] if i < 2 else "漫"
-            segments.append(exp_data)
-            condition_labels.append(label)
-    elif subject_name == "MPX" and end_keys:
-        # MPX：end为结束，end前一个marker为开始，取后三个时间段
-        end_col = end_keys[0]
-        end_idxs = data.index[data[end_col] == 1].tolist()
-        # 取后三个end
-        end_idxs = end_idxs[-3:]
-        start_idxs = []
-        for e in end_idxs:
-            # 找end前面最近的一个非end的marker为1的行
-            found = False
-            for i in range(e-1, -1, -1):
-                row = data.iloc[i]
-                for k in columns:
-                    if k != end_col and row.get(k, 0) == 1:
-                        start_idxs.append(i)
-                        found = True
-                        break
-                if found:
-                    break
-        for s, e, label in zip(start_idxs, end_idxs, file_conditions[-3:]):
-            exp_data = data.iloc[s:e+1, :]
-            segments.append(exp_data)
-            condition_labels.append(label)
-    elif subject_name == "LXY" and end_keys:
-        # LXY：end为结束，end前一个marker为开始，取后三个时间段
-        end_col = end_keys[0]
-        end_idxs = data.index[data[end_col] == 1].tolist()
-        # 取后三个end
-        end_idxs = end_idxs[-3:]
-        start_idxs = []
-        for e in end_idxs:
-            # 找end前面最近的一个非end的marker为1的行
-            found = False
-            for i in range(e-1, -1, -1):
-                row = data.iloc[i]
-                for k in columns:
-                    if k != end_col and row.get(k, 0) == 1:
-                        start_idxs.append(i)
-                        found = True
-                        break
-                if found:
-                    break
-        for s, e, label in zip(start_idxs, end_idxs, file_conditions[-3:]):
-            exp_data = data.iloc[s:e+1, :]
-            segments.append(exp_data)
-            condition_labels.append(label)
-    elif subject_name in ["YYH", "YYX", "ZJM", "ZHR", "WZM", "WQX"] and end_keys:
+
+    if subject_name in ["MPX","LXY","YYH", "YYX", "ZJM", "ZHR", "WZM", "WQX"] and end_keys:
         # 这些被试：end为结束，end前一个marker为开始，取后三个时间段
         end_col = end_keys[0]
         end_idxs = data.index[data[end_col] == 1].tolist()
@@ -159,20 +82,13 @@ def read_csv_data(file_path, file_conditions_order=None):
     elif seg_keys:
         # 直接用long/short/manga等分段
         seg_keys = [k for k in columns if k.lower() in key_to_label.keys()]
-        seg_count = min(len(seg_keys), 3)
         print(f"--- 处理文件: {os.path.basename(file_path)} ---") # 添加打印
         print(f"被试 {subject_name} 的分段标记: {seg_keys}") # 添加打印
 
-        # 处理过的标记
-        processed_keys = []
+        # 收集所有有效的数据段
+        valid_segments = []
         
-        for i, key in enumerate(seg_keys[:seg_count]): # 修改为seg_count
-            # 如果已经处理过这个标记，跳过
-            if key in processed_keys:
-                continue
-                
-            processed_keys.append(key)
-                
+        for key in seg_keys:
             print(f"\n--- 处理标记: {key} ---") # 添加打印
             idxs = data.index[data[key] == 1].tolist()
             print(f"标记 {key} 的索引位置: {idxs}") # 添加打印
@@ -211,8 +127,26 @@ def read_csv_data(file_path, file_conditions_order=None):
 
             label = key_to_label.get(key.lower(), f"未知_{key}")
             print(f"分段 {key} 成功提取，标签为: {label}") # 添加打印
-            segments.append(exp_data)
-            condition_labels.append(label)
+            
+            # 将有效的数据段添加到列表中，包含所有必要信息
+            valid_segments.append({
+                'key': key,
+                'start': s,
+                'end': e,
+                'data': exp_data,
+                'label': label
+            })
+        
+        # 如果有超过3个有效数据段，只取后三个
+        if len(valid_segments) > 3:
+            print(f"检测到{len(valid_segments)}个有效数据段，只使用后三个")
+            valid_segments = valid_segments[-3:]
+        
+        # 将有效数据段添加到结果中
+        for segment in valid_segments:
+            segments.append(segment['data'])
+            condition_labels.append(segment['label'])
+            print(f"使用数据段: {segment['key']}，标签: {segment['label']}，范围: {segment['start']}-{segment['end']}")
     else:
         print(f"警告：文件 {os.path.basename(file_path)} 未检测到有效分段标记，使用全段")
         segments = [data]
@@ -222,6 +156,12 @@ def read_csv_data(file_path, file_conditions_order=None):
     results = []
     for exp_data, cond_label in zip(segments, condition_labels):
         # ---- 您已有的调试打印 ----
+        filename = os.path.basename(file_path) # 获取文件名
+        subject_name_parts = filename.split('-')
+        subject_name = ""
+        if len(subject_name_parts) > 1:
+            subject_name = subject_name_parts[1] # 假设被试ID是文件名的第二部分
+
         if subject_name == "ZYH": # 确保这里的 "ZYH" 与被试35文件名中的ID一致
             print(f"\nDEBUG: Subject {subject_name}, Condition {cond_label}")
             print("exp_data.head(10):") # 打印原始分段数据的前10行
@@ -325,13 +265,59 @@ def process_all_subjects(data_folder):
     """批量处理所有被试的数据"""
     all_subjects_data = []
 
-    # 获取所有CSV文件
-    csv_files = [f for f in os.listdir(data_folder)
-                if f.endswith('.csv') and not f.startswith('bcrx')] # 处理所有文件
+    # 定义结果文件路径
+    results_file_path = os.path.join(data_folder, 'EEG_analysis_results.csv') # 或者直接指定绝对路径
+    processed_subject_ids = set()
 
-    for csv_file in csv_files:
+    # 尝试读取已处理的被试列表
+    try:
+        if os.path.exists(results_file_path):
+            results_df = pd.read_csv(results_file_path)
+            # 确保 'Subject' 列存在且数据类型正确，以便进行比较
+            if 'Subject' in results_df.columns:
+                # 将结果文件中的 Subject ID 转换为字符串，以匹配从文件名解析的 ID 类型
+                processed_subject_ids = set(results_df['Subject'].astype(str).unique())
+                print(f"已在结果文件中找到的被试ID: {processed_subject_ids}")
+            else:
+                print(f"警告：结果文件 {results_file_path} 中缺少 'Subject' 列。")
+        else:
+            print(f"信息：结果文件 {results_file_path} 不存在，将处理所有找到的被试。")
+    except Exception as e:
+        print(f"读取结果文件 {results_file_path} 时出错: {e}。将尝试处理所有找到的被试。")
+
+    # 获取所有CSV文件 (您可以保留或修改这里的筛选逻辑)
+    # 例如，如果您只想处理特定编号的被试，可以保留 any(f.startswith(f"{num}-") for num in ["35", "36"])
+    # 如果要处理所有符合命名规范的被试，可以移除该部分
+    csv_files_all = [f for f in os.listdir(data_folder)
+                     if f.endswith('.csv') and not f.startswith('bcrx')] # 初始筛选
+
+    csv_files_to_process = []
+    for csv_file in csv_files_all:
+        # 从文件名解析被试ID以进行检查
+        # 注意：这里的 parse_filename 返回的 subject_id 应该是字符串类型
+        temp_subject_id, _, _ = parse_filename(csv_file) # 假设 parse_filename 返回 (subject_id, gender, conditions)
+        
+        # 检查此被试是否已在结果文件中
+        if temp_subject_id in processed_subject_ids:
+            print(f"信息：被试 {temp_subject_id} 的数据已存在于 {results_file_path}，跳过处理。")
+            continue
+        
+        # 如果您仍想只处理特定编号的、且未在结果文件中的被试，可以在此添加额外筛选
+        # 例如，如果您只想处理 "35" 或 "36" 中未被处理的：
+        # if not any(csv_file.startswith(f"{num}-") for num in ["35", "36"]):
+        #     continue
+            
+        csv_files_to_process.append(csv_file)
+    
+    if not csv_files_to_process:
+        print("没有需要处理的新被试数据。")
+        return pd.DataFrame(all_subjects_data) # 返回空或已有的数据
+
+    print(f"将要处理的被试文件: {csv_files_to_process}")
+
+    for csv_file in csv_files_to_process: # 现在只遍历筛选后的文件列表
         file_path = os.path.join(data_folder, csv_file)
-        subject_id, gender, conditions = parse_filename(csv_file)
+        subject_id, gender, conditions = parse_filename(csv_file) # subject_id 在这里被重新赋值
 
         print(f"处理被试 {subject_id} 的数据...")
         
@@ -370,7 +356,7 @@ def process_all_subjects(data_folder):
 
 
             # 2.1 预处理
-            raw.filter(l_freq=0.5, h_freq=40, method='fir', phase='zero-double')  # 带通滤波0.5-40Hz
+            raw.filter(l_freq=1, h_freq=30, method='fir', phase='zero-double')  # 带通滤波0.5-40Hz
             raw.notch_filter(freqs=50)  # 陷波滤波去除工频干扰
             
             # 2.2 功率谱密度计算 - 添加数据有效性检查
