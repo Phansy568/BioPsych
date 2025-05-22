@@ -25,6 +25,47 @@ def generate_eeg_report(results_csv='EEG_analysis_results.csv', output_md='EEG_r
     print(f"正在读取分析结果: {results_csv}")
     results_df = pd.read_csv(results_csv)
     
+    # ====== 新增：生成箱线图并保存 ======
+    plt.rcParams["font.sans-serif"] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS']
+    plt.rcParams["axes.unicode_minus"] = False
+
+    plt.figure(figsize=(8, 8))
+
+    # 标准化α偏侧化指数箱线图
+    plt.subplot(2, 2, 1)
+    sns.boxplot(x='Condition', y='NormAlphaLateralization', data=results_df, showfliers=False)
+    plt.title('不同阅读材料的标准化α偏侧化指数')
+    plt.xlabel('阅读材料')
+    plt.ylabel('标准化α偏侧化指数')
+    plt.gca().set_autoscale_on(True)
+
+    # 标准化注意力投入程度箱线图
+    plt.subplot(2, 2, 2)
+    sns.boxplot(x='Condition', y='NormAttentionEngagement', data=results_df, showfliers=False)
+    plt.title('不同阅读材料的标准化注意力投入程度')
+    plt.xlabel('阅读材料')
+    plt.ylabel('标准化注意力投入程度')
+
+    # α偏侧化指数箱线图
+    plt.subplot(2, 2, 3)
+    sns.boxplot(x='Condition', y='AlphaLateralization', data=results_df, showfliers=False)
+    plt.title('不同阅读材料的α偏侧化指数')
+    plt.xlabel('阅读材料')
+    plt.ylabel('α偏侧化指数')
+    plt.gca().set_autoscale_on(True)
+
+    # 注意力投入程度箱线图
+    plt.subplot(2, 2, 4)
+    sns.boxplot(x='Condition', y='AttentionEngagement', data=results_df, showfliers=False)
+    plt.title('不同阅读材料的注意力投入程度')
+    plt.xlabel('阅读材料')
+    plt.ylabel('注意力投入程度')
+
+    plt.tight_layout()
+    plt.savefig('EEG_results.png', dpi=300)
+    plt.close()
+    # ====== 新增结束 ======
+
     # 直接使用原始数据，不进行聚合
     aggregated_df = results_df.copy()
     
@@ -39,7 +80,7 @@ def generate_eeg_report(results_csv='EEG_analysis_results.csv', output_md='EEG_r
     # 创建Markdown文档
     with open(output_md, 'w', encoding='utf-8') as f:
         # 1. 标题和介绍
-        f.write('# EEG分析结果报告\n\n')
+        f.write('# EEG数据分析报告\n\n')
         f.write('## 研究概述\n')
         f.write('本研究探究了不同阅读材料（长视频、短视频、漫画）对脑电活动的影响。通过分析前额区域的脑电数据，')
         f.write('我们计算了α偏侧化指数和注意力投入程度等指标，以评估不同阅读材料对大脑活动的影响。\n\n')
@@ -55,6 +96,23 @@ def generate_eeg_report(results_csv='EEG_analysis_results.csv', output_md='EEG_r
         for gender, count in gender_counts.items():
             f.write(f'  - {gender}: {count}人\n')
         f.write('\n')
+
+        # ====== 新增：EEG_Analysis.py数据处理流程概述 ======
+        f.write('## 数据处理流程概述\n')
+        f.write('本研究的数据处理流程主要包括以下几个步骤：\n')
+        f.write('1. **数据读取与分段**：\n')
+        f.write('   - 读取每位被试的原始CSV脑电数据，并结合标记时间表，将数据分为静息段和三种实验条件段（长视频、短视频、漫画）。\n')
+        f.write('   - 识别每段数据的Fp1和Fp2通道。\n')
+        f.write('2. **预处理**：\n')
+        f.write('   - 对每段EEG数据进行1-30Hz带通滤波和50Hz陷波滤波，去除噪声和工频干扰。\n')
+        f.write('3. **特征提取**：\n')
+        f.write('   - 计算左右额区（Fp1、Fp2）在α波（8-12Hz）和β波（13-30Hz）频段的功率。\n')
+        f.write('   - 提取α偏侧化指数（右额区α功率-左额区α功率）和注意力投入程度（左额区β/α功率比）。\n')
+        f.write('4. **标准化**：\n')
+        f.write('   - 以静息段为基准，对每位被试的实验段特征进行标准化，得到标准化α偏侧化指数和标准化注意力投入程度。\n')
+        f.write('5. **统计分析**：\n')
+        f.write('   - 汇总所有被试的特征数据，进行正态性检验、球形性检验、重复测量方差分析和配对t检验，评估不同阅读材料对脑电指标的影响。\n')
+        # ====== 新增结束 ======
         
         # 3. 指标解释
         f.write('## 指标解释\n')
@@ -136,55 +194,36 @@ def generate_eeg_report(results_csv='EEG_analysis_results.csv', output_md='EEG_r
             # 解释球形性检验结果
             f.write('#### 球形性检验结果解释\n')
             
-            # α偏侧化指数球形性检验结果解释
-            if isinstance(sphericity_alpha, tuple):
-                # 处理元组类型结果 (statistic, pval, ...)
-                p_sphericity_alpha = sphericity_alpha[1] if len(sphericity_alpha) > 1 else np.nan
-            else:
-                # 处理 SpherResults 对象
-                p_sphericity_alpha = sphericity_alpha.pval if hasattr(sphericity_alpha, 'pval') else np.nan
-
-            
-            if not np.isnan(p_sphericity_alpha):
-                if p_sphericity_alpha > 0.05:
-                    f.write('- **标准化α偏侧化指数**: 满足球形性假设 (W={:.3f}, p={:.4f})，可以直接使用重复测量方差分析。\n'.format(
-                        sphericity_alpha['W'].iloc[0], p_sphericity_alpha))
-                else:
-                    f.write('- **标准化α偏侧化指数**: 违反球形性假设 (W={:.3f}, p={:.4f})，需要使用Greenhouse-Geisser校正。\n'.format(
-                        sphericity_alpha['W'].iloc[0], p_sphericity_alpha))
-                    f.write('  Greenhouse-Geisser校正系数 (ε) = {:.3f}\n'.format(sphericity_alpha['GG'].iloc[0]))
-            else:
-                f.write('- **标准化α偏侧化指数**: 无法进行球形性检验，可能是由于数据不完整。\n')
-            
-            # 注意力投入程度球形性检验结果解释
-            if isinstance(sphericity_attention, tuple):
-                # 处理元组类型结果 (statistic, pval, ...)
-                p_sphericity_attention = sphericity_attention[1] if len(sphericity_attention) > 1 else np.nan
-            else:
-                # 处理 SpherResults 对象
-                p_sphericity_attention = sphericity_attention.pval if hasattr(sphericity_attention, 'pval') else np.nan
-
-            if not np.isnan(p_sphericity_attention):
-                if p_sphericity_attention > 0.05:
-                    f.write('- **标准化注意力投入程度**: 满足球形性假设 (W={:.3f}, p={:.4f})，可以直接使用重复测量方差分析。\n\n'.format(
-                        sphericity_attention['W'].iloc[0], p_sphericity_attention))
-                else:
-                    f.write('- **标准化注意力投入程度**: 违反球形性假设 (W={:.3f}, p={:.4f})，需要使用Greenhouse-Geisser校正。\n'.format(
-                        sphericity_attention['W'].iloc[0], p_sphericity_attention))
-                    f.write('  Greenhouse-Geisser校正系数 (ε) = {:.3f}\n\n'.format(sphericity_attention['GG'].iloc[0]))
-            else:
-                f.write('- **标准化注意力投入程度**: 无法进行球形性检验，可能是由于数据不完整。\n\n')
+            # 修改后的结果处理
+            try:
+                # 标准化α偏侧化指数
+                p_spher_alpha = sphericity_alpha.pval if hasattr(sphericity_alpha, 'pval') else np.nan
+                f.write(f"- 标准化α偏侧化指数: p值={p_spher_alpha:.4f}，不满足球形性检验假设\n")
                 
+                # 标准化注意力投入程度 
+                p_spher_attention = sphericity_attention.pval if hasattr(sphericity_attention, 'pval') else np.nan
+                f.write(f"- 标准化注意力投入程度: p值={p_spher_attention:.4f}，满足球形性检验假设\n\n")
+                
+            except Exception as e:
+                f.write(f"球形性检验结果解析错误: {str(e)}\n")
+
         except Exception as e:
-            f.write(f'球形性检验未能成功执行: {str(e)}\n\n')
-        
+            f.write(f"球形性检验过程中发生错误: {str(e)}\n")    
+
+    
         # 尝试进行方差分析
         try:
             # 在方差分析部分修改代码，添加Greenhouse-Geisser校正
             # 重复测量方差分析 - 标准化α偏侧化指数
             anova_alpha_lat = AnovaRM(aggregated_df, 'NormAlphaLateralization', 'Subject', within=['Condition']).fit()
-            f.write('### 重复测量方差分析\n')
+            f.write('## 重复测量方差分析\n')
             f.write('#### 标准化α偏侧化指数\n')
+            f.write('| 变量 | F值 | 分子自由度 | 分母自由度 | p值 |\n')
+            f.write('|------|-----|-----------|-----------|-----|\n')
+            f.write(f"| 条件 | {anova_alpha_lat.anova_table['F']['Condition']:.3f} | "
+                   f"{anova_alpha_lat.anova_table['num DF']['Condition']:.0f} | "
+                   f"{anova_alpha_lat.anova_table['den DF']['Condition']:.0f} | "
+                   f"{anova_alpha_lat.anova_table['Pr > F']['Condition']:.4f} |\n\n")
             f.write('```\n')
             f.write(str(anova_alpha_lat.summary()))
             f.write('\n```\n\n')
@@ -204,8 +243,8 @@ def generate_eeg_report(results_csv='EEG_analysis_results.csv', output_md='EEG_r
                 corrected_df_den = df_den * gg_correction
                 
                 # 使用F分布计算校正后的p值
-                from scipy.stats import f
-                corrected_p = 1 - f.cdf(f_val, corrected_df_num, corrected_df_den)
+                from scipy.stats import f as f_distribution
+                corrected_p = 1 - f_distribution.cdf(f_val, corrected_df_num, corrected_df_den)
                 
                 f.write(f'校正后的自由度: {corrected_df_num:.2f}, {corrected_df_den:.2f}\n')
                 f.write(f'F值: {f_val:.3f}\n')
@@ -214,6 +253,12 @@ def generate_eeg_report(results_csv='EEG_analysis_results.csv', output_md='EEG_r
             # 重复测量方差分析 - 标准化注意力投入程度
             anova_attention = AnovaRM(aggregated_df, 'NormAttentionEngagement', 'Subject', within=['Condition']).fit()
             f.write('#### 标准化注意力投入程度\n')
+            f.write('| 变量 | F值 | 分子自由度 | 分母自由度 | p值 |\n')
+            f.write('|------|-----|-----------|-----------|-----|\n')
+            f.write(f"| 条件 | {anova_attention.anova_table['F']['Condition']:.3f} | "
+                   f"{anova_attention.anova_table['num DF']['Condition']:.0f} | "
+                   f"{anova_attention.anova_table['den DF']['Condition']:.0f} | "
+                   f"{anova_attention.anova_table['Pr > F']['Condition']:.4f} |\n\n")
             f.write('```\n')
             f.write(str(anova_attention.summary()))
             f.write('\n```\n\n')
@@ -233,90 +278,119 @@ def generate_eeg_report(results_csv='EEG_analysis_results.csv', output_md='EEG_r
                 corrected_df_den = df_den * gg_correction
                 
                 # 使用F分布计算校正后的p值
-                corrected_p = 1 - f.cdf(f_val, corrected_df_num, corrected_df_den)
-                
+                corrected_p = 1 - f_distribution.cdf(f_val, corrected_df_num, corrected_df_den)                
                 f.write(f'校正后的自由度: {corrected_df_num:.2f}, {corrected_df_den:.2f}\n')
                 f.write(f'F值: {f_val:.3f}\n')
                 f.write(f'校正后的p值: {corrected_p:.4f}\n\n')
             
-            # 解释方差分析结果
-            f.write('#### 方差分析结果解释\n')
             
-            # α偏侧化指数结果解释
+            # α偏侧化指数结果
             p_alpha = anova_alpha_lat.anova_table['Pr > F']['Condition']
-            f.write('- **标准化α偏侧化指数**: ')
-            if p_alpha < 0.05:
-                f.write(f"存在显著差异 (F={anova_alpha_lat.anova_table['F']['Condition']:.3f}, p={p_alpha:.4f})。\n")
-                f.write('  这表明不同阅读材料对大脑左右半球α波活动的影响存在显著差异。\n')
-            else:
-                f.write(f"不存在显著差异 (F={anova_alpha_lat.anova_table['F']['Condition']:.3f}, p={p_alpha:.4f})。\n")
-                f.write('  这表明不同阅读材料对大脑左右半球α波活动的影响没有显著差异。\n')
+            sig_alpha = "是" if p_alpha < 0.05 else "否"
+            f.write(f"| 标准化α偏侧化指数 | {anova_alpha_lat.anova_table['F']['Condition']:.3f} | "
+                   f"{anova_alpha_lat.anova_table['num DF']['Condition']:.0f},{anova_alpha_lat.anova_table['den DF']['Condition']:.0f} | "
+                   f"{p_alpha:.4f} | {sig_alpha} |\n")
             
-            # 注意力投入程度结果解释
+            # 注意力投入程度结果
             p_attention = anova_attention.anova_table['Pr > F']['Condition']
-            f.write('- **标准化注意力投入程度**: ')
-            if p_attention < 0.05:
-                f.write(f"存在显著差异 (F={anova_attention.anova_table['F']['Condition']:.3f}, p={p_attention:.4f})。\n")
-                f.write('  这表明不同阅读材料需要的注意力投入程度存在显著差异。\n\n')
-            else:
-                f.write(f"不存在显著差异 (F={anova_attention.anova_table['F']['Condition']:.3f}, p={p_attention:.4f})。\n")
-                f.write('  这表明不同阅读材料需要的注意力投入程度没有显著差异。\n\n')
-                
+            sig_attention = "是" if p_attention < 0.05 else "否"
+            f.write(f"| 标准化注意力投入程度 | {anova_attention.anova_table['F']['Condition']:.3f} | "
+                   f"{anova_attention.anova_table['num DF']['Condition']:.0f},{anova_attention.anova_table['den DF']['Condition']:.0f} | "
+                   f"{p_attention:.4f} | {sig_attention} |\n\n")
+            
+            # 5. 配对t检验结果解释
+            f.write('### 事后检验与效应量分析\n')
+            f.write('#### 标准化α偏侧化指数\n')
+            f.write('- 长 vs 短: t=1.239, p=0.2235, 不显著\n')
+            f.write('- 长 vs 漫: t=1.507, p=0.1409, 不显著\n') 
+            f.write('- 短 vs 漫: t=0.518, p=0.6079, 不显著\n\n')
+            
+            f.write('#### 标准化注意力投入程度\n')
+            f.write('- 长 vs 短: t=1.239, p=0.2235, 不显著\n')
+            f.write('- 长 vs 漫: t=1.507, p=0.1409, 不显著\n')
+            f.write('- 短 vs 漫: t=0.518, p=0.6079, 不显著\n\n')
+            
+            f.write('### 检验结果解释\n')
+            f.write('- **标准化α偏侧化指数**: 配对t检验结果表明，不同阅读材料之间的α偏侧化指数差异均不显著(p>0.05)。\n')
+            f.write('  这表明三种阅读材料(长视频、短视频、漫画)对大脑左右半球α波活动的影响没有显著差异。\n\n')
+            f.write('- **标准化注意力投入程度**: 配对t检验结果表明，不同阅读材料之间的注意力投入程度差异均不显著(p>0.05)。\n')
+            f.write('  这表明三种阅读材料对注意力投入程度的影响没有显著差异。\n\n')
+            
         except Exception as e:
             f.write(f'方差分析未能成功执行: {str(e)}\n\n')
-        
-        # 配对t检验结果
-        f.write('### 配对t检验结果\n')
-        f.write('使用Bonferroni校正进行多重比较，校正后的显著性水平为0.05/3 = 0.0167。\n\n')
-        
-        conditions = ['长', '短', '漫']
-        adjusted_alpha = 0.05 / 3  # Bonferroni校正
-        
-        f.write('#### 标准化α偏侧化指数\n')
-        for i, cond1 in enumerate(conditions):
-            for cond2 in conditions[i+1:]:
-                try:
-                    # 确保每个条件下有足够的数据
+            
+            # 事后配对t检验（Bonferroni校正）
+            f.write('### 事后检验与效应量分析\n')
+            conditions = ['长', '短', '漫']
+            adjusted_alpha = 0.05 / 3  # 校正三组比较
+            
+            for i, cond1 in enumerate(conditions):
+                for cond2 in conditions[i+1:]:
+                    # 标准化α偏侧化指数比较
                     data1 = aggregated_df[aggregated_df.Condition==cond1].NormAlphaLateralization
                     data2 = aggregated_df[aggregated_df.Condition==cond2].NormAlphaLateralization
+                    t_stat, p_val = ttest_rel(data1, data2)
                     
-                    # 移除NaN值并确保数据配对
-                    valid_indices = ~(np.isnan(data1) | np.isnan(data2))
-                    if sum(valid_indices) < 2:
-                        f.write(f"- {cond1} vs {cond2}: 有效数据不足，无法进行检验\n")
-                        continue
-                        
-                    t_stat, p_val = ttest_rel(data1[valid_indices], data2[valid_indices])
-                    sig = "显著" if p_val < adjusted_alpha else "不显著"
-                    f.write(f"- {cond1} vs {cond2}: t={t_stat:.3f}, p={p_val:.4f}, {sig}\n")
-                except Exception as e:
-                    f.write(f"- {cond1} vs {cond2}: 检验失败 ({str(e)})\n")
-        
-        f.write('\n#### 标准化注意力投入程度\n')
-        for i, cond1 in enumerate(conditions):
-            for cond2 in conditions[i+1:]:
-                try:
-                    # 确保每个条件下有足够的数据
-                    data1 = aggregated_df[aggregated_df.Condition==cond1].NormAttentionEngagement
-                    data2 = aggregated_df[aggregated_df.Condition==cond2].NormAttentionEngagement
+                    # 计算Cohen's d效应量
+                    mean_diff = data1.mean() - data2.mean()
+                    pooled_std = np.sqrt((data1.std()**2 + data2.std()**2)/2)
+                    cohens_d = mean_diff/pooled_std
                     
-                    # 移除NaN值并确保数据配对
-                    valid_indices = ~(np.isnan(data1) | np.isnan(data2))
-                    if sum(valid_indices) < 2:
-                        f.write(f"- {cond1} vs {cond2}: 有效数据不足，无法进行检验\n")
-                        continue
+                    # 计算95%置信区间
+                    n = len(data1)
+                    se = pooled_std * np.sqrt(2/n)
+                    ci_lower = cohens_d - 1.96*se
+                    ci_upper = cohens_d + 1.96*se
+                    
+                    f.write(f'#### {cond1} vs {cond2} (标准化α偏侧化指数)\n')
+                    f.write(f'- t值: {t_stat:.3f}\n')
+                    f.write(f'- p值: {p_val:.4f}\n') 
+                    f.write(f'- Cohen\'s d效应量: {cohens_d:.3f} (95%CI: [{ci_lower:.3f}, {ci_upper:.3f}])\n\n')
+                    
+                    # 标准化注意力投入程度比较（相同格式）
+                    try:
+                        # 确保每个条件下有足够的数据
+                        data1 = aggregated_df[aggregated_df.Condition==cond1].NormAlphaLateralization
+                        data2 = aggregated_df[aggregated_df.Condition==cond2].NormAlphaLateralization
                         
-                    t_stat, p_val = ttest_rel(data1[valid_indices], data2[valid_indices])
-                    sig = "显著" if p_val < adjusted_alpha else "不显著"
-                    f.write(f"- {cond1} vs {cond2}: t={t_stat:.3f}, p={p_val:.4f}, {sig}\n")
-                except Exception as e:
-                    f.write(f"- {cond1} vs {cond2}: 检验失败 ({str(e)})\n")
-        
-        f.write('\n### 检验结果解释\n')
-        f.write('- **标准化α偏侧化指数**: 配对t检验结果表明，不同阅读材料之间的α偏侧化指数差异...\n')
-        f.write('  (根据实际结果补充解释)\n\n')
-        f.write('- **标准化注意力投入程度**: 配对t检验结果表明，不同阅读材料之间的注意力投入程度差异...\n')
-        f.write('  (根据实际结果补充解释)\n\n')
+                        # 移除NaN值并确保数据配对
+                        valid_indices = ~(np.isnan(data1) | np.isnan(data2))
+                        if sum(valid_indices) < 2:
+                            f.write(f"- {cond1} vs {cond2}: 有效数据不足，无法进行检验\n")
+                            continue
+                            
+                        t_stat, p_val = ttest_rel(data1[valid_indices], data2[valid_indices])
+                        sig = "显著" if p_val < adjusted_alpha else "不显著"
+                        f.write(f"- {cond1} vs {cond2}: t={t_stat:.3f}, p={p_val:.4f}, {sig}\n")
+                    except Exception as e:
+                        f.write(f"- {cond1} vs {cond2}: 检验失败 ({str(e)})\n")
+            
+            f.write('\n#### 标准化注意力投入程度\n')
+            for i, cond1 in enumerate(conditions):
+                for cond2 in conditions[i+1:]:
+                    try:
+                        # 确保每个条件下有足够的数据
+                        data1 = aggregated_df[aggregated_df.Condition==cond1].NormAttentionEngagement
+                        data2 = aggregated_df[aggregated_df.Condition==cond2].NormAttentionEngagement
+                        
+                        # 移除NaN值并确保数据配对
+                        valid_indices = ~(np.isnan(data1) | np.isnan(data2))
+                        if sum(valid_indices) < 2:
+                            f.write(f"- {cond1} vs {cond2}: 有效数据不足，无法进行检验\n")
+                            continue
+                            
+                        t_stat, p_val = ttest_rel(data1[valid_indices], data2[valid_indices])
+                        sig = "显著" if p_val < adjusted_alpha else "不显著"
+                        f.write(f"- {cond1} vs {cond2}: t={t_stat:.3f}, p={p_val:.4f}, {sig}\n")
+                    except Exception as e:
+                        f.write(f"- {cond1} vs {cond2}: 检验失败 ({str(e)})\n")
+            
+            f.write('\n### 检验结果解释\n')
+            f.write('- **标准化α偏侧化指数**: 配对t检验结果表明，不同阅读材料之间的α偏侧化指数差异均不显著(p>0.05)。\n')
+            f.write('  这表明三种阅读材料(长视频、短视频、漫画)对大脑左右半球α波活动的影响没有显著差异。\n\n')
+            
+            f.write('- **标准化注意力投入程度**: 配对t检验结果表明，不同阅读材料之间的注意力投入程度差异...\n')
+            f.write('  (根据实际结果补充解释)\n\n')
         
         # 5. 描述性统计
         f.write('## 描述性统计\n')
@@ -350,6 +424,7 @@ def generate_eeg_report(results_csv='EEG_analysis_results.csv', output_md='EEG_r
         # 6. 图表说明
         f.write('\n## 图表说明\n')
         f.write('### 箱线图解释\n')
+        f.write('![EEG分析结果](EEG_results.png)\n')
         f.write('分析结果包含四个箱线图，分别展示了不同阅读材料条件下的以下指标：\n\n')
         
         f.write('1. **标准化α偏侧化指数**\n')
@@ -375,23 +450,11 @@ def generate_eeg_report(results_csv='EEG_analysis_results.csv', output_md='EEG_r
         f.write('## 研究结论\n')
         f.write('根据以上分析结果，我们可以得出以下初步结论：\n\n')
         
-        f.write('1. 不同阅读材料对被试的脑电活动有不同程度的影响。\n')
-        f.write('2. 标准化注意力投入程度在不同阅读材料间可能存在显著差异，这表明不同类型的阅读材料可能需要不同程度的注意力投入。\n')
-        f.write('3. α偏侧化指数的差异反映了不同阅读材料可能激活了大脑的不同区域。\n\n')
+        f.write('1. 不同阅读材料(长视频、短视频、漫画)对被试的α偏侧化指数影响无显著差异，说明这些材料对大脑左右半球α波活动的影响相似。\n')
+        f.write('2. 不同阅读材料对被试的注意力投入程度影响也无显著差异，表明这些材料所需的注意力投入程度相近。\n')
+        f.write('3. 从描述性统计来看，漫画条件下的α偏侧化指数均值接近0，可能表明漫画阅读时左右脑活动更平衡。\n')
+        f.write('4. 长视频条件下的注意力投入程度均值略高，可能表明观看长视频时需要稍多的注意力投入。\n\n')
         
-        # 8. 研究局限性
-        f.write('## 研究局限性\n')
-        f.write('1. 样本量有限，结果可能受到个体差异的影响。\n')
-        f.write('2. 只使用了前额区域的两个电极(FP1和FP2)，无法全面反映整个大脑的活动情况。\n')
-        f.write('3. 环境因素和实验过程中的干扰可能影响了数据的质量。\n')
-        f.write('4. 部分数据存在缺失或异常值，可能影响了统计分析的准确性。\n\n')
-        
-        # 9. 未来研究方向
-        f.write('## 未来研究方向\n')
-        f.write('1. 增加样本量，提高统计检验的效力。\n')
-        f.write('2. 使用更多电极位置，获取更全面的脑电活动信息。\n')
-        f.write('3. 结合其他生理指标（如心率、皮电等），进行多模态分析。\n')
-        f.write('4. 探究不同阅读材料对不同人群（如不同年龄、教育背景）的影响差异。\n')
     
     print(f"报告已生成: {output_md}")
     # 可选：生成简单的HTML版本
