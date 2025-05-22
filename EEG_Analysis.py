@@ -236,16 +236,17 @@ def process_all_subjects(data_folder, marker_file):
                     print(f"警告：被试 {subject_id} 条件 {cond_label} 的数据方差过小 ({data_var})，跳过功率谱计算")
                     continue
                     
-                freqs = np.arange(1, 40, 1)
+                freqs = np.arange(8, 30, 1)
                 # 计算功率谱
                 psds, freqs = mne.time_frequency.psd_array_welch(
                     raw.get_data(),
                     sfreq=raw.info['sfreq'],
-                    fmin=1,
-                    fmax=40,
+                    fmin=8,
+                    fmax=30,
                     n_jobs=4,
-                    n_fft=1024,
-                    n_overlap=256,
+                    n_fft=1000,
+                    n_per_seg=1000,
+                    n_overlap=500,
                     average='mean'
                 )
             except Exception as e:
@@ -276,10 +277,9 @@ def process_all_subjects(data_folder, marker_file):
             alpha_lateralization = right_alpha_power - left_alpha_power
             
             # 计算注意力投入程度β/α（alpha的平均功率除以beta）
-            # 注意：根据您的要求，这里是alpha除以beta，而不是beta除以alpha
-            attention_engagement = left_alpha_power / left_beta_power if left_beta_power > 0 else np.nan
+            attention_engagement = left_beta_power / left_alpha_power if left_alpha_power > 0 else np.nan
             
-            # 存储该条件的数据
+            # 存储该条件的数据前添加异常点检测
             subject_data[cond_label] = {
                 'left_alpha': left_alpha_power,
                 'right_alpha': right_alpha_power,
@@ -381,46 +381,53 @@ def main():
     for i, cond1 in enumerate(conditions):
         for cond2 in conditions[i+1:]:
             # 标准化α偏侧化指数比较
-            t_stat, p_val = ttest_rel(
-                results_df[results_df.Condition==cond1].NormAlphaLateralization,
-                results_df[results_df.Condition==cond2].NormAlphaLateralization)
+            data1 = results_df[results_df.Condition==cond1].NormAlphaLateralization
+            data2 = results_df[results_df.Condition==cond2].NormAlphaLateralization
+            t_stat, p_val = ttest_rel(data1, data2)
+            # 计算效应量Cohen's d
+            diff = data1 - data2
+            cohens_d = diff.mean() / diff.std(ddof=1) if diff.std(ddof=1) != 0 else float('nan')
             sig = "*" if p_val < adjusted_alpha else "ns"
-            print(f"{cond1} vs {cond2} (标准化α偏侧化指数): t={t_stat:.3f}, p={p_val:.4f}, {sig}")
+            print(f"{cond1} vs {cond2} (标准化α偏侧化指数): t={t_stat:.3f}, p={p_val:.4f}, d={cohens_d:.3f}, {sig}")
             
             # 标准化注意力投入程度比较
-            t_stat, p_val = ttest_rel(
-                results_df[results_df.Condition==cond1].NormAttentionEngagement,
-                results_df[results_df.Condition==cond2].NormAttentionEngagement)
+            data1 = results_df[results_df.Condition==cond1].NormAttentionEngagement
+            data2 = results_df[results_df.Condition==cond2].NormAttentionEngagement
+            t_stat, p_val = ttest_rel(data1, data2)
+            diff = data1 - data2
+            cohens_d = diff.mean() / diff.std(ddof=1) if diff.std(ddof=1) != 0 else float('nan')
             sig = "*" if p_val < adjusted_alpha else "ns"
-            print(f"{cond1} vs {cond2} (标准化注意力投入程度): t={t_stat:.3f}, p={p_val:.4f}, {sig}")
+            print(f"{cond1} vs {cond2} (标准化注意力投入程度): t={t_stat:.3f}, p={p_val:.4f}, d={cohens_d:.3f}, {sig}")
     
     # 3.3 可视化结果
-    plt.figure(figsize=(12, 10))
+    plt.figure(figsize=(5, 10))
     
     # 标准化α偏侧化指数箱线图
     plt.subplot(2, 2, 1)
-    sns.boxplot(x='Condition', y='NormAlphaLateralization', data=results_df)
+    sns.boxplot(x='Condition', y='NormAlphaLateralization', data=results_df, showfliers=False)
     plt.title('不同阅读材料的标准化α偏侧化指数')
     plt.xlabel('阅读材料')
     plt.ylabel('标准化α偏侧化指数')
-    
+    plt.gca().set_autoscale_on(True)
+
     # 标准化注意力投入程度箱线图
     plt.subplot(2, 2, 2)
-    sns.boxplot(x='Condition', y='NormAttentionEngagement', data=results_df)
+    sns.boxplot(x='Condition', y='NormAttentionEngagement', data=results_df, showfliers=False)
     plt.title('不同阅读材料的标准化注意力投入程度')
     plt.xlabel('阅读材料')
     plt.ylabel('标准化注意力投入程度')
-    
+
     # α偏侧化指数箱线图
     plt.subplot(2, 2, 3)
-    sns.boxplot(x='Condition', y='AlphaLateralization', data=results_df)
+    sns.boxplot(x='Condition', y='AlphaLateralization', data=results_df, showfliers=False)
     plt.title('不同阅读材料的α偏侧化指数')
     plt.xlabel('阅读材料')
     plt.ylabel('α偏侧化指数')
-    
+    plt.gca().set_autoscale_on(True)
+
     # 注意力投入程度箱线图
     plt.subplot(2, 2, 4)
-    sns.boxplot(x='Condition', y='AttentionEngagement', data=results_df)
+    sns.boxplot(x='Condition', y='AttentionEngagement', data=results_df, showfliers=False)
     plt.title('不同阅读材料的注意力投入程度')
     plt.xlabel('阅读材料')
     plt.ylabel('注意力投入程度')
