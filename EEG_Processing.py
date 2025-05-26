@@ -5,6 +5,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
 
+mne.set_log_level('ERROR')  # 可选等级：'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
+
 def read_csv_data(file_path, marker_df, file_conditions_order=None):
     """读取CSV格式的EEG数据，并根据标记时间表提取所有实验段的多个时间段，返回[(raw, condition_label, segment_type), ...]"""
     # 在函数开头初始化empty_segments
@@ -256,55 +258,49 @@ def preprocess_eeg(raw, subject_id, cond_label, segment_type):
     处理后的MNE Raw对象，如果处理失败则返回None
     """
     try:
-        
+        print(f"[DEBUG] 进入3-sigma异常值剔除流程，被试: {subject_id}, 条件: {cond_label}, 段落: {segment_type}")
+        # 1.3-sigma原则
+        data = raw.get_data()
+        std_dev = np.std(data)
+        mean_val = np.mean(data)
+        threshold = 3 * std_dev
+        print(f"[DEBUG] 均值: {mean_val}, 标准差: {std_dev}, 阈值: {threshold}")
+        mask = np.abs(data - mean_val) <= threshold
+        # 对每个通道分别处理异常值
+        for i in range(data.shape[0]):
+            channel_mask = mask[i]
+            if not np.all(channel_mask):
+                # 用线性插值填补异常值
+                channel_data = data[i]
+                good_idx = np.where(channel_mask)[0]
+                bad_idx = np.where(~channel_mask)[0]
+                print(f"[DEBUG] 通道 {raw.ch_names[i]} 异常点索引: {bad_idx}")
+                if len(good_idx) > 1:
+                    channel_data[bad_idx] = np.interp(bad_idx, good_idx, channel_data[good_idx])
+                else:
+                    channel_data[bad_idx] = mean_val
+                data[i] = channel_data
+                print(f"被试 {subject_id} 条件 {cond_label}, 段落 {segment_type} - 通道 {raw.ch_names[i]} 剔除异常值")
+        raw._data = data
+        print(f"[DEBUG] 3-sigma异常值剔除结束，被试: {subject_id}, 条件: {cond_label}, 段落: {segment_type}")
+
         # 2. 检查电压跳变
         threshold = 100  # 微伏，可根据实际数据调整
         if np.any(np.abs(raw.get_data()) > threshold):
             print(f"警告：被试 {subject_id} 条件 {cond_label}, 段落 {segment_type} 检测到电压跳变")
-        
+        print(f"[DEBUG] 电压跳变检测结束")
+
         # 3. 带通滤波1-30Hz
+        print(f"[DEBUG] 开始带通滤波1-30Hz")
         raw.filter(l_freq=1, h_freq=30, method='fir', phase='zero-double')
-        
+        print(f"[DEBUG] 带通滤波结束")
+
         # 4. 陷波滤波去除工频干扰
+        print(f"[DEBUG] 开始陷波滤波去除工频干扰")
         raw.notch_filter(freqs=50)
+        print(f"[DEBUG] 陷波滤波结束")
         
-        # 5. ICA去除眼动伪迹
-        try:
-            # 检查数据长度是否足够进行ICA
-            data_length = raw.get_data().shape[1]
-            if data_length < 1000:  # 假设至少需要1秒的数据
-                print(f"警告：被试 {subject_id} 条件 {cond_label}, 段落 {segment_type} 的数据长度不足 ({data_length} 点)，跳过ICA")
-                return raw
-            
-            # 创建ICA对象
-            n_components = len(raw.ch_names)  # 使用所有可用通道
-            ica = mne.preprocessing.ICA(n_components=n_components, random_state=42)
-            
-            # 应用ICA
-            ica.fit(raw)
-            
-            # 自动检测和排除眼动伪迹
-            # 注意：这里假设FP1和FP2通道可以用于检测眼动
-            # 如果没有EOG通道，可以使用前额电极作为代理
-            eog_indices = []
-            for i, component in enumerate(ica.get_components()):
-                # 简单的启发式方法：检查在前额区域有高权重的成分
-                fp_weights = np.abs(component[[i for i, ch in enumerate(raw.ch_names) if ch.lower() in ['fp1', 'fp2']]])
-                if np.any(fp_weights > 0.5):  # 阈值可调整
-                    eog_indices.append(i)
-            
-            if eog_indices:
-                print(f"被试 {subject_id} 条件 {cond_label}, 段落 {segment_type} - 检测到 {len(eog_indices)} 个可能的眼动成分")
-                ica.exclude = eog_indices
-                ica.apply(raw)
-            else:
-                print(f"被试 {subject_id} 条件 {cond_label}, 段落 {segment_type} - 未检测到明显的眼动成分")
-        
-        except Exception as e:
-            print(f"警告：被试 {subject_id} 条件 {cond_label}, 段落 {segment_type} 的ICA处理失败: {str(e)}")
-            # ICA失败不应该中断整个处理流程，继续使用滤波后的数据
-        
-        # 6. 检查处理后的数据质量
+        # 5. 检查处理后的数据质量
         data_var = np.var(raw.get_data())
         if data_var < 1e-10:
             print(f"警告：被试 {subject_id} 条件 {cond_label}, 段落 {segment_type} 预处理后数据方差过小 ({data_var})")
@@ -348,8 +344,10 @@ def process_all_subjects(data_folder, marker_file):
         
         for (raw, cond_label, segment_type) in raw_label_list:
             # 2.1 预处理
-            raw.filter(l_freq=1, h_freq=30, method='fir', phase='zero-double')  # 带通滤波1-30Hz
-            raw.notch_filter(freqs=50)  # 陷波滤波去除工频干扰
+            raw = preprocess_eeg(raw, subject_id, cond_label, segment_type)
+            if raw is None:
+                print(f"警告：被试 {subject_id} 条件 {cond_label}, 段落 {segment_type} 的预处理失败，跳过后续分析")
+                continue
             
             # 2.2 功率谱密度计算
             try:

@@ -97,11 +97,11 @@ def perform_statistical_analysis(results_df):
     try:
         # 对注意力投入度进行重复测量方差分析
         print("\n注意力投入度的重复测量方差分析:")
-        attention_data = aggregated_df.dropna(subset=['AttentionEngagement'])
+        attention_data = aggregated_df.dropna(subset=['NormAttentionEngagement'])
         
         # 检查是否有足够的数据进行分析
         if len(attention_data) > 10:
-            aovrm = AnovaRM(attention_data, 'AttentionEngagement', 'Subject', within=['Condition', 'SegmentType'])
+            aovrm = AnovaRM(attention_data, 'NormAttentionEngagement', 'Subject', within=['Condition', 'SegmentType'])
             res = aovrm.fit()
             print(res)
             
@@ -113,7 +113,7 @@ def perform_statistical_analysis(results_df):
                 # 预先计算并存储所有相关条件的均值
                 for cond_key in expected_conditions:
                     if cond_key in attention_data['Condition'].unique():
-                        condition_means[cond_key] = attention_data[attention_data['Condition'] == cond_key]['AttentionEngagement'].mean()
+                        condition_means[cond_key] = attention_data[attention_data['Condition'] == cond_key]['NormAttentionEngagement'].mean()
                 
                 # 对每对条件进行配对t检验
                 for i, cond1 in enumerate(expected_conditions):
@@ -131,9 +131,9 @@ def perform_statistical_analysis(results_df):
                         # 对每个被试，计算其在不同段落下的平均值
                         for subject in attention_data['Subject'].unique():
                             cond1_data_subject = attention_data[(attention_data['Subject'] == subject) & 
-                                                      (attention_data['Condition'] == cond1)]['AttentionEngagement']
+                                                      (attention_data['Condition'] == cond1)]['NormAttentionEngagement']
                             cond2_data_subject = attention_data[(attention_data['Subject'] == subject) & 
-                                                      (attention_data['Condition'] == cond2)]['AttentionEngagement']
+                                                      (attention_data['Condition'] == cond2)]['NormAttentionEngagement']
                             
                             if not cond1_data_subject.empty and not cond2_data_subject.empty:
                                 cond1_subjects[subject] = cond1_data_subject.mean()
@@ -184,10 +184,10 @@ def perform_statistical_analysis(results_df):
             
         # 对α偏侧化指数进行重复测量方差分析
         print("\nα偏侧化指数的重复测量方差分析:")
-        alpha_data = aggregated_df.dropna(subset=['AlphaLateralization'])
+        alpha_data = aggregated_df.dropna(subset=['NormAlphaLateralization'])
         
         if len(alpha_data) > 10:
-            aovrm = AnovaRM(alpha_data, 'AlphaLateralization', 'Subject', within=['Condition', 'SegmentType'])
+            aovrm = AnovaRM(alpha_data, 'NormAlphaLateralization', 'Subject', within=['Condition', 'SegmentType'])
             res = aovrm.fit()
             print(res)
             
@@ -199,7 +199,7 @@ def perform_statistical_analysis(results_df):
                 # 预先计算并存储所有相关条件的均值
                 for cond_key in expected_conditions:
                     if cond_key in alpha_data['Condition'].unique():
-                        condition_means[cond_key] = alpha_data[alpha_data['Condition'] == cond_key]['AlphaLateralization'].mean()
+                        condition_means[cond_key] = alpha_data[alpha_data['Condition'] == cond_key]['NormAlphaLateralization'].mean()
                 
                 # 对每对条件进行配对t检验
                 for i, cond1 in enumerate(expected_conditions):
@@ -217,9 +217,9 @@ def perform_statistical_analysis(results_df):
                         # 对每个被试，计算其在不同段落下的平均值
                         for subject in alpha_data['Subject'].unique():
                             cond1_data_subject = alpha_data[(alpha_data['Subject'] == subject) & 
-                                                  (alpha_data['Condition'] == cond1)]['AlphaLateralization']
+                                                  (alpha_data['Condition'] == cond1)]['NormAlphaLateralization']
                             cond2_data_subject = alpha_data[(alpha_data['Subject'] == subject) & 
-                                                  (alpha_data['Condition'] == cond2)]['AlphaLateralization']
+                                                  (alpha_data['Condition'] == cond2)]['NormAlphaLateralization']
                             
                             if not cond1_data_subject.empty and not cond2_data_subject.empty:
                                 cond1_subjects[subject] = cond1_data_subject.mean()
@@ -278,7 +278,7 @@ def perform_statistical_analysis(results_df):
             # 检查每个条件的数据量
             condition_data = {}
             for cond in expected_conditions:
-                cond_data = segment_data[segment_data['Condition'] == cond]['AttentionEngagement'].dropna()
+                cond_data = segment_data[segment_data['Condition'] == cond]['NormAttentionEngagement'].dropna()
                 if len(cond_data) < 2:  # 至少需要2个样本才能进行比较
                     print(f"警告: 段落 {segment} 中条件 '{cond}' 的样本量不足 ({len(cond_data)}个)，可能影响统计结果")
                 else:
@@ -348,14 +348,14 @@ def create_visualizations(results_df):
     
     # 绘制不同条件下的注意力投入度
     plt.figure(figsize=(10, 6))
-    sns.boxplot(x='Condition', y='AttentionEngagement', hue='SegmentType', data=results_df,showfliers=False)
+    sns.boxplot(x='Condition', y='NormAttentionEngagement', hue='SegmentType', data=results_df,showfliers=False)
     plt.title('不同条件下的注意力投入度', fontsize=16)
     plt.xlabel('实验条件', fontsize=14)
     plt.ylabel('注意力投入度 (β/α)', fontsize=14)
     
     # 自动设置纵坐标范围
-    y_min = results_df['AttentionEngagement'].min() - 0.1 * abs(results_df['AttentionEngagement'].min())
-    y_max = results_df['AttentionEngagement'].max() + 0.1 * abs(results_df['AttentionEngagement'].max())
+    y_min = results_df['NormAttentionEngagement'].min() - 0.1 * abs(results_df['NormAttentionEngagement'].min())
+    y_max = results_df['NormAttentionEngagement'].max() + 0.1 * abs(results_df['NormAttentionEngagement'].max())
     plt.ylim(y_min, y_max)
     
     # 添加条件标签映射，确保中文显示正确
@@ -371,14 +371,14 @@ def create_visualizations(results_df):
     
     # 绘制不同条件下的α偏侧化指数
     plt.figure(figsize=(10, 6))
-    sns.boxplot(x='Condition', y='AlphaLateralization', hue='SegmentType', data=results_df,showfliers=False)
+    sns.boxplot(x='Condition', y='NormAlphaLateralization', hue='SegmentType', data=results_df,showfliers=False)
     plt.title('不同条件下的α偏侧化指数', fontsize=16)
     plt.xlabel('实验条件', fontsize=14)
     plt.ylabel('α偏侧化指数 (右-左)', fontsize=14)
     
     # 自动设置纵坐标范围
-    y_min = results_df['AlphaLateralization'].min() - 0.1 * abs(results_df['AlphaLateralization'].min())
-    y_max = results_df['AlphaLateralization'].max() + 0.1 * abs(results_df['AlphaLateralization'].max())
+    y_min = results_df['NormAlphaLateralization'].min() - 0.1 * abs(results_df['NormAlphaLateralization'].min())
+    y_max = results_df['NormAlphaLateralization'].max() + 0.1 * abs(results_df['NormAlphaLateralization'].max())
     plt.ylim(y_min, y_max)
     
     # 添加条件标签映射
@@ -400,8 +400,8 @@ def create_visualizations(results_df):
     
     # 按条件和段落分组计算平均值
     trend_data = results_df.groupby(['Condition', 'SegmentType']).agg({
-        'AttentionEngagement': 'mean',
-        'AlphaLateralization': 'mean',
+        'NormAttentionEngagement': 'mean',
+        'NormAlphaLateralization': 'mean',
         'SegmentOrder': 'first'
     }).reset_index()
     
@@ -411,7 +411,7 @@ def create_visualizations(results_df):
     # 为每个条件绘制注意力投入程度的线图
     for condition in trend_data['Condition'].unique():
         condition_data = trend_data[trend_data['Condition'] == condition]
-        plt.plot(condition_data['SegmentType'], condition_data['AttentionEngagement'], marker='o', label=f'{condition} - 注意力投入度')
+        plt.plot(condition_data['SegmentType'], condition_data['NormAttentionEngagement'], marker='o', label=f'{condition} - 注意力投入度')
     
     plt.title('注意力投入度随时间的变化趋势', fontsize=16)
     plt.xlabel('段落', fontsize=14)
@@ -426,7 +426,7 @@ def create_visualizations(results_df):
     # 为每个条件绘制α偏侧化指数的线图
     for condition in trend_data['Condition'].unique():
         condition_data = trend_data[trend_data['Condition'] == condition]
-        plt.plot(condition_data['SegmentType'], condition_data['AlphaLateralization'], marker='o', label=f'{condition} - α偏侧化指数')
+        plt.plot(condition_data['SegmentType'], condition_data['NormAlphaLateralization'], marker='o', label=f'{condition} - α偏侧化指数')
     
     plt.title('α偏侧化指数随时间的变化趋势', fontsize=16)
     plt.xlabel('段落', fontsize=14)
